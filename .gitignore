@@ -1,0 +1,14 @@
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.env
+
+# Logs
+*.log
+logs/

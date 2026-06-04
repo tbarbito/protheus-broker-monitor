@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "protheus-broker-monitor"
+version = "1.0.0"
+description = "Monitora o Broker Protheus e reinicia automaticamente slaves em quarentena"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "tbarbito" }]
+dependencies = [
+    "typer>=0.15",
+    "rich>=13.7",
+    "requests>=2.32",
+    "beautifulsoup4>=4.12",
+]
+
+[project.scripts]
+broker-monitor = "broker_monitor.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/broker_monitor"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

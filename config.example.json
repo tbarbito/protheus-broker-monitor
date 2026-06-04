@@ -1,0 +1,22 @@
+{
+  "brokerUrl": "https://seu-servidor:10000/totvs_broker_query/status",
+  "logDir": "C:\\Logs\\broker-monitor",
+  "logRetentionDays": 7,
+  "autoRestart": true,
+  "startTimeoutSeconds": 60,
+  "serviceNamePattern": "TotvsAppSlv{:02d}PRD",
+  "slaveRange": {
+    "min": 1,
+    "max": 7
+  },
+  "email": {
+    "enabled": true,
+    "smtpServer": "smtp.seu-servidor.com",
+    "smtpPort": 587,
+    "useSSL": false,
+    "from": "monitor@sua-empresa.com",
+    "to": ["admin@sua-empresa.com", "ti@sua-empresa.com"],
+    "username": "monitor@sua-empresa.com",
+    "password": "sua-senha-smtp"
+  }
+}
