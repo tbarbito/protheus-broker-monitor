@@ -48,11 +48,11 @@ copy config.example.json config.json
   "logRetentionDays": 7,
   "autoRestart": true,
   "startTimeoutSeconds": 60,
-  "serviceNamePattern": "TotvsAppSlv{:02d}PRD",
-  "slaveRange": {
-    "min": 1,
-    "max": 7
-  },
+  "slaves": [
+    {"port": 10001, "serviceName": "NomeDoServico01"},
+    {"port": 10002, "serviceName": "NomeDoServico02"},
+    {"port": 10003, "serviceName": "NomeDoServico03"}
+  ],
   "email": {
     "enabled": true,
     "smtpServer": "smtp.seu-servidor.com",
@@ -73,9 +73,9 @@ copy config.example.json config.json
 | `logRetentionDays` | int | `7` | Numero de dias para manter os arquivos de log |
 | `autoRestart` | bool | `true` | Se `false`, apenas registra os slaves em quarentena sem reiniciar |
 | `startTimeoutSeconds` | int | `60` | Tempo maximo (em segundos) aguardando o servico atingir estado RUNNING apos o start |
-| `serviceNamePattern` | string | `TotvsAppSlv{:02d}PRD` | Padrao do nome do servico Windows. `{:02d}` sera substituido pelo numero do slave (ex: `03`) |
-| `slaveRange.min` | int | `1` | Numero minimo do slave (porta minima = 10000 + min) |
-| `slaveRange.max` | int | `7` | Numero maximo do slave (porta maxima = 10000 + max) |
+| `slaves` | array | `[]` | Lista de slaves monitorados. Cada item mapeia uma porta a um nome de servico Windows (ver abaixo) |
+| `slaves[].port` | int | **obrigatorio** | Porta do slave conforme exibida na pagina de status do Broker |
+| `slaves[].serviceName` | string | **obrigatorio** | Nome exato do servico Windows correspondente (conforme exibido em `services.msc`) |
 | `email.enabled` | bool | `false` | Habilita o envio de emails de alerta |
 | `email.smtpServer` | string | - | Endereco do servidor SMTP |
 | `email.smtpPort` | int | `587` | Porta do servidor SMTP |
@@ -85,16 +85,36 @@ copy config.example.json config.json
 | `email.username` | string | - | Usuario para autenticacao SMTP |
 | `email.password` | string | - | Senha para autenticacao SMTP |
 
-### Como o numero do slave e calculado
+### Sobre portas e nomes de servicos
 
-O slave e identificado pela porta do endereco `IP:porta` retornado pelo Broker:
+O Protheus nao tem um padrao fixo de portas ou nomes de servico -- cada ambiente e configurado
+de acordo com as politicas da empresa. Por isso, o mapeamento e **totalmente explicito** no config:
+voce declara exatamente qual porta corresponde a qual servico Windows, sem suposicoes.
 
+**Para descobrir as portas:** acesse a URL configurada em `brokerUrl` no browser. A pagina de
+status do Broker lista todos os slaves com seus respectivos enderecos `IP:porta`.
+
+**Para descobrir os nomes dos servicos:** abra `services.msc` no servidor Windows onde o Protheus
+esta instalado e localize os servicos de AppServer/Slave.
+
+Exemplos de configuracoes validas:
+
+```json
+// Ambiente com portas sequenciais e nomes padrao TOTVS
+"slaves": [
+  {"port": 10001, "serviceName": "TotvsAppSlv01PRD"},
+  {"port": 10002, "serviceName": "TotvsAppSlv02PRD"}
+]
+
+// Ambiente com portas e nomes customizados
+"slaves": [
+  {"port": 9101, "serviceName": "ProtheusSlaveERP_01"},
+  {"port": 9102, "serviceName": "ProtheusSlaveERP_02"},
+  {"port": 9201, "serviceName": "ProtheusSlaveRH_01"}
+]
 ```
-numero_slave = porta - 10000
-nome_servico = serviceNamePattern.format(numero_slave)
 
-Exemplo: porta 10003 -> slave 3 -> "TotvsAppSlv03PRD"
-```
+> Slaves nao listados no config serao ignorados pelo monitor (nenhuma acao sera tomada).
 
 ## Uso
 
@@ -179,8 +199,8 @@ Os logs sao gravados em `logDir` com o formato `broker_monitor_YYYYMMDD.log`:
 ```
 [2026-06-04 08:00:01] [INFO] Verificando broker: https://...
 [2026-06-04 08:00:02] [WARNING] Quarentena: 10.0.0.1:10003 | QUARANTINE_TIMEOUT
-[2026-06-04 08:00:02] [INFO] Reiniciando servico: TotvsAppSlv03PRD
-[2026-06-04 08:00:05] [INFO] Restart OK: TotvsAppSlv03PRD -> RUNNING
+[2026-06-04 08:00:02] [INFO] Reiniciando servico: NomeDoServico03
+[2026-06-04 08:00:05] [INFO] Restart OK: NomeDoServico03 -> RUNNING
 [2026-06-04 08:00:05] [INFO] Email enviado.
 ```
 

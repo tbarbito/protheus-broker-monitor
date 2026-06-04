@@ -6,9 +6,9 @@ from pathlib import Path
 
 
 @dataclass
-class SlaveRange:
-    min: int
-    max: int
+class SlaveConfig:
+    port: int
+    service_name: str
 
 
 @dataclass
@@ -30,17 +30,25 @@ class Config:
     log_retention_days: int
     auto_restart: bool
     start_timeout_seconds: int
-    service_name_pattern: str
-    slave_range: SlaveRange
+    slaves: list[SlaveConfig]
     email: EmailConfig
+
+    @property
+    def slave_port_map(self) -> dict[int, str]:
+        """Returns a dict mapping port -> service_name for quick lookup."""
+        return {s.port: s.service_name for s in self.slaves}
 
 
 def load_config(path: Path) -> Config:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
-    sr = data.get("slaveRange", {})
     em = data.get("email", {})
+
+    slaves = [
+        SlaveConfig(port=int(s["port"]), service_name=s["serviceName"])
+        for s in data.get("slaves", [])
+    ]
 
     return Config(
         broker_url=data["brokerUrl"],
@@ -48,11 +56,7 @@ def load_config(path: Path) -> Config:
         log_retention_days=int(data.get("logRetentionDays", 7)),
         auto_restart=bool(data.get("autoRestart", True)),
         start_timeout_seconds=int(data.get("startTimeoutSeconds", 60)),
-        service_name_pattern=data.get("serviceNamePattern", "TotvsAppSlv{:02d}PRD"),
-        slave_range=SlaveRange(
-            min=int(sr.get("min", 1)),
-            max=int(sr.get("max", 7)),
-        ),
+        slaves=slaves,
         email=EmailConfig(
             enabled=bool(em.get("enabled", False)),
             smtp_server=em.get("smtpServer", ""),

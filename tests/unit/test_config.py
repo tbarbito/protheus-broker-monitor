@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from broker_monitor.config import Config, EmailConfig, SlaveRange, load_config
+from broker_monitor.config import Config, EmailConfig, SlaveConfig, load_config
 
 
 def _write(tmp_path: Path, data: dict) -> Path:
@@ -23,10 +23,23 @@ class TestLoadConfig:
         cfg = load_config(_write(tmp_path, config_data))
         assert isinstance(cfg.log_dir, Path)
 
-    def test_slave_range(self, tmp_path, config_data):
+    def test_slaves_loaded(self, tmp_path, config_data):
         cfg = load_config(_write(tmp_path, config_data))
-        assert cfg.slave_range.min == 1
-        assert cfg.slave_range.max == 7
+        assert len(cfg.slaves) == 3
+        assert cfg.slaves[0].port == 10001
+        assert cfg.slaves[0].service_name == "TestSlv01PRD"
+
+    def test_slave_port_map(self, tmp_path, config_data):
+        cfg = load_config(_write(tmp_path, config_data))
+        m = cfg.slave_port_map
+        assert m[10001] == "TestSlv01PRD"
+        assert m[10002] == "TestSlv02PRD"
+        assert m[10003] == "TestSlv03PRD"
+
+    def test_slaves_empty_by_default(self, tmp_path):
+        cfg = load_config(_write(tmp_path, {"brokerUrl": "http://host/status"}))
+        assert cfg.slaves == []
+        assert cfg.slave_port_map == {}
 
     def test_email_config(self, tmp_path, config_data):
         cfg = load_config(_write(tmp_path, config_data))
@@ -36,19 +49,23 @@ class TestLoadConfig:
         assert cfg.email.to_addrs == ["admin@test.com"]
 
     def test_defaults(self, tmp_path):
-        minimal = {"brokerUrl": "http://host:10000/status"}
-        cfg = load_config(_write(tmp_path, minimal))
+        cfg = load_config(_write(tmp_path, {"brokerUrl": "http://host/status"}))
         assert cfg.log_retention_days == 7
         assert cfg.auto_restart is True
         assert cfg.start_timeout_seconds == 60
-        assert cfg.slave_range.min == 1
-        assert cfg.slave_range.max == 7
         assert cfg.email.enabled is False
 
-    def test_service_name_pattern(self, tmp_path, config_data):
-        cfg = load_config(_write(tmp_path, config_data))
-        assert cfg.service_name_pattern == "TestSlv{:02d}PRD"
-        assert cfg.service_name_pattern.format(3) == "TestSlv03PRD"
+    def test_custom_ports_and_service_names(self, tmp_path):
+        data = {
+            "brokerUrl": "http://host:9999/status",
+            "slaves": [
+                {"port": 9001, "serviceName": "MeuServico_A"},
+                {"port": 9002, "serviceName": "MeuServico_B"},
+            ],
+        }
+        cfg = load_config(_write(tmp_path, data))
+        assert cfg.slave_port_map[9001] == "MeuServico_A"
+        assert cfg.slave_port_map[9002] == "MeuServico_B"
 
     def test_missing_required_field_raises(self, tmp_path):
         with pytest.raises(KeyError):

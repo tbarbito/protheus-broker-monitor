@@ -4,11 +4,11 @@
   "logRetentionDays": 7,
   "autoRestart": true,
   "startTimeoutSeconds": 60,
-  "serviceNamePattern": "TotvsAppSlv{:02d}PRD",
-  "slaveRange": {
-    "min": 1,
-    "max": 7
-  },
+  "slaves": [
+    {"port": 10001, "serviceName": "NomeDoServico01"},
+    {"port": 10002, "serviceName": "NomeDoServico02"},
+    {"port": 10003, "serviceName": "NomeDoServico03"}
+  ],
   "email": {
     "enabled": true,
     "smtpServer": "smtp.seu-servidor.com",

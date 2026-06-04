@@ -61,8 +61,11 @@ _BASE_CONFIG = {
     "logRetentionDays": 7,
     "autoRestart": True,
     "startTimeoutSeconds": 5,
-    "serviceNamePattern": "TestSlv{:02d}PRD",
-    "slaveRange": {"min": 1, "max": 7},
+    "slaves": [
+        {"port": 10001, "serviceName": "TestSlv01PRD"},
+        {"port": 10002, "serviceName": "TestSlv02PRD"},
+        {"port": 10003, "serviceName": "TestSlv03PRD"},
+    ],
     "email": {
         "enabled": False,
         "smtpServer": "smtp.test.com",

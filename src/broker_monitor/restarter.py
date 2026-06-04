@@ -8,17 +8,15 @@ from dataclasses import dataclass
 @dataclass
 class ServiceInfo:
     address: str
-    slave_number: int
+    port: int
     service_name: str
 
 
-def resolve_service(
-    address: str,
-    pattern: str,
-    slave_min: int,
-    slave_max: int,
-) -> ServiceInfo | None:
-    """Maps an IP:port address to a Windows service name using the port-to-slave formula."""
+def resolve_service(address: str, port_map: dict[int, str]) -> ServiceInfo | None:
+    """
+    Maps an IP:port address to a Windows service name using the explicit port map
+    defined in config.json. Returns None if the port is not mapped.
+    """
     parts = address.split(":")
     if len(parts) < 2:
         return None
@@ -28,15 +26,11 @@ def resolve_service(
     except ValueError:
         return None
 
-    slave_num = port - 10000
-    if not (slave_min <= slave_num <= slave_max):
+    service_name = port_map.get(port)
+    if not service_name:
         return None
 
-    return ServiceInfo(
-        address=address,
-        slave_number=slave_num,
-        service_name=pattern.format(slave_num),
-    )
+    return ServiceInfo(address=address, port=port, service_name=service_name)
 
 
 def get_service_state(service_name: str) -> str:

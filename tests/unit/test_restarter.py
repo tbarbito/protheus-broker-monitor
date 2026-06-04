@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,38 +11,42 @@ from broker_monitor.restarter import (
     restart_service,
 )
 
-PATTERN = "TestSlv{:02d}PRD"
+PORT_MAP = {
+    10001: "TestSlv01PRD",
+    10002: "TestSlv02PRD",
+    10003: "TestSlv03PRD",
+}
 
 
 class TestResolveService:
     def test_valid_address(self):
-        info = resolve_service("10.0.0.1:10003", PATTERN, 1, 7)
+        info = resolve_service("10.0.0.1:10002", PORT_MAP)
         assert info is not None
-        assert info.slave_number == 3
-        assert info.service_name == "TestSlv03PRD"
-        assert info.address == "10.0.0.1:10003"
+        assert info.port == 10002
+        assert info.service_name == "TestSlv02PRD"
+        assert info.address == "10.0.0.1:10002"
 
-    def test_boundary_min(self):
-        info = resolve_service("10.0.0.1:10001", PATTERN, 1, 7)
-        assert info is not None
-        assert info.slave_number == 1
+    def test_first_and_last_port(self):
+        assert resolve_service("10.0.0.1:10001", PORT_MAP) is not None
+        assert resolve_service("10.0.0.1:10003", PORT_MAP) is not None
 
-    def test_boundary_max(self):
-        info = resolve_service("10.0.0.1:10007", PATTERN, 1, 7)
-        assert info is not None
-        assert info.slave_number == 7
-
-    def test_below_range_returns_none(self):
-        assert resolve_service("10.0.0.1:10000", PATTERN, 1, 7) is None
-
-    def test_above_range_returns_none(self):
-        assert resolve_service("10.0.0.1:10008", PATTERN, 1, 7) is None
+    def test_unmapped_port_returns_none(self):
+        assert resolve_service("10.0.0.1:9999", PORT_MAP) is None
 
     def test_invalid_port_returns_none(self):
-        assert resolve_service("10.0.0.1:abc", PATTERN, 1, 7) is None
+        assert resolve_service("10.0.0.1:abc", PORT_MAP) is None
 
     def test_missing_port_returns_none(self):
-        assert resolve_service("10.0.0.1", PATTERN, 1, 7) is None
+        assert resolve_service("10.0.0.1", PORT_MAP) is None
+
+    def test_empty_map_returns_none(self):
+        assert resolve_service("10.0.0.1:10001", {}) is None
+
+    def test_custom_non_sequential_ports(self):
+        custom_map = {9001: "AppServer_A", 9005: "AppServer_B"}
+        info = resolve_service("192.168.1.10:9005", custom_map)
+        assert info is not None
+        assert info.service_name == "AppServer_B"
 
 
 class TestGetServiceState:
@@ -74,9 +78,9 @@ class TestRestartService:
         return m
 
     def test_successful_restart(self):
-        stop_ok = self._make_proc(0)
+        stop_ok  = self._make_proc(0)
         start_ok = self._make_proc(0)
-        running = self._make_proc(0, "STATE: RUNNING")
+        running  = self._make_proc(0, "STATE: RUNNING")
 
         with patch("broker_monitor.restarter.subprocess.run", side_effect=[stop_ok, start_ok, running]), \
              patch("broker_monitor.restarter.time.sleep"):
@@ -86,10 +90,9 @@ class TestRestartService:
         assert state == "RUNNING"
 
     def test_already_stopped_service(self):
-        # Error code 1062 = service not started, should be OK
         stop_already = self._make_proc(1062)
-        start_ok = self._make_proc(0)
-        running = self._make_proc(0, "STATE: RUNNING")
+        start_ok     = self._make_proc(0)
+        running      = self._make_proc(0, "STATE: RUNNING")
 
         with patch("broker_monitor.restarter.subprocess.run", side_effect=[stop_already, start_ok, running]), \
              patch("broker_monitor.restarter.time.sleep"):
@@ -108,7 +111,7 @@ class TestRestartService:
         assert "sc stop falhou" in state
 
     def test_start_fails(self):
-        stop_ok = self._make_proc(0)
+        stop_ok   = self._make_proc(0)
         start_fail = self._make_proc(1)
 
         with patch("broker_monitor.restarter.subprocess.run", side_effect=[stop_ok, start_fail]), \
@@ -119,11 +122,12 @@ class TestRestartService:
         assert "sc start falhou" in state
 
     def test_timeout_waiting_for_running(self):
-        stop_ok = self._make_proc(0)
-        start_ok = self._make_proc(0)
+        stop_ok    = self._make_proc(0)
+        start_ok   = self._make_proc(0)
         not_running = self._make_proc(0, "STATE: STOPPED")
 
-        with patch("broker_monitor.restarter.subprocess.run", side_effect=[stop_ok, start_ok] + [not_running] * 10), \
+        with patch("broker_monitor.restarter.subprocess.run",
+                   side_effect=[stop_ok, start_ok] + [not_running] * 10), \
              patch("broker_monitor.restarter.time.sleep"):
             ok, state = restart_service("TestSvc", start_timeout=3)
 

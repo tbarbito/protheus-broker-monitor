@@ -204,12 +204,7 @@ def _run_once(cfg: Config, dry_run: bool, logger: logging.Logger) -> bool:
     skipped: list[str] = []
 
     for slave in quarantined:
-        info = resolve_service(
-            slave.address,
-            cfg.service_name_pattern,
-            cfg.slave_range.min,
-            cfg.slave_range.max,
-        )
+        info = resolve_service(slave.address, cfg.slave_port_map)
         if not info:
             console.print(f"  [yellow]Fora do mapeamento, pulando:[/yellow] {slave.address}")
             logger.warning(f"Fora do mapeamento: {slave.address}")
