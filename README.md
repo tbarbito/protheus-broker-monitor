@@ -152,6 +152,67 @@ Pressione `Ctrl+C` para encerrar.
 
 ---
 
+## Implantacao em ambientes sem acesso a internet (versao portable)
+
+Ambientes corporativos frequentemente bloqueiam o acesso a repositorios externos (GitHub, PyPI)
+nos servidores de producao. Para esses casos, gere um executavel standalone na sua maquina
+de desenvolvimento (que tem acesso a internet) e copie apenas o `.exe` para o servidor destino.
+
+### Como gerar o executavel
+
+Na sua maquina de desenvolvimento (com Python e acesso a internet):
+
+```powershell
+# Clone o repositorio e entre na pasta
+git clone https://github.com/tbarbito/protheus-broker-monitor.git
+cd protheus-broker-monitor
+
+# Execute o script de build
+.\build.ps1
+```
+
+O script instala o PyInstaller automaticamente se necessario e gera:
+
+```
+dist\
+  broker-monitor.exe   # executavel standalone (~15 MB)
+```
+
+### Como implantar no servidor
+
+Copie apenas dois arquivos para o servidor Protheus:
+
+| Arquivo | Descricao |
+|---|---|
+| `broker-monitor.exe` | Executavel standalone. Nao requer Python nem internet. |
+| `config.json` | Suas configuracoes (criado a partir do `config.example.json`) |
+
+```
+C:\Scripts\broker-monitor\
+  broker-monitor.exe
+  config.json
+```
+
+### Como executar no servidor
+
+O uso e identico ao modo instalado via pip -- basta substituir `broker-monitor` pelo caminho do `.exe`:
+
+```powershell
+# Verificar status
+C:\Scripts\broker-monitor\broker-monitor.exe check --config C:\Scripts\broker-monitor\config.json
+
+# Execucao pontual (ideal para Task Scheduler)
+C:\Scripts\broker-monitor\broker-monitor.exe run --config C:\Scripts\broker-monitor\config.json
+
+# Modo daemon
+C:\Scripts\broker-monitor\broker-monitor.exe run --config C:\Scripts\broker-monitor\config.json --daemon --interval 5
+```
+
+> O servidor destino **nao precisa** de Python, pip ou qualquer outra dependencia instalada.
+> O `.exe` carrega tudo internamente.
+
+---
+
 ## Agendamento via Windows Task Scheduler
 
 O modo one-shot e o ideal para uso com o Task Scheduler. Configure assim:

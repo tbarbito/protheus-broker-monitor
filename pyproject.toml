@@ -27,6 +27,7 @@ packages = ["src/broker_monitor"]
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
+    "pyinstaller>=6.0",
 ]
 
 [tool.pytest.ini_options]

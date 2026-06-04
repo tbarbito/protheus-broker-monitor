@@ -9,6 +9,9 @@ build/
 .venv/
 .env
 
+# PyInstaller
+*.spec
+
 # Logs
 *.log
 logs/
