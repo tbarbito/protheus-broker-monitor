@@ -3,6 +3,10 @@
 Monitora o Broker do Protheus e reinicia automaticamente os slaves em quarentena.
 Suporta execucao pontual via **Windows Task Scheduler** e modo **daemon** continuo.
 
+> **Aviso:** este projeto nao e uma ferramenta oficial nem homologada pela TOTVS S.A.
+> Foi idealizado de forma pessoal como um facilitador para o monitoramento e recuperacao automatica
+> do Broker Protheus. Use por sua conta e risco.
+
 ## Funcionalidades
 
 - Verifica a pagina de status do Broker e detecta slaves em quarentena
