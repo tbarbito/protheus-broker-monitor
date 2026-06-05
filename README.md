@@ -58,8 +58,8 @@ copy config.example.json config.json
 > Use nomes descritivos para gerenciar multiplos ambientes:
 >
 > ```powershell
-> broker-monitor.exe run --config C:\Scripts\agro.json
-> broker-monitor.exe run --config C:\Scripts\marfrig.json
+> broker-monitor.exe run --config C:\Scripts\broker_prd.json
+> broker-monitor.exe run --config C:\Scripts\broker_cluster.json
 > ```
 
 ### Referencia completa do config.json
