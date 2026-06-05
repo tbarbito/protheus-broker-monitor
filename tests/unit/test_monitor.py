@@ -108,3 +108,25 @@ class TestCheckBroker:
             reachable, slaves = check_broker("http://test/status")
 
         assert reachable is False
+
+    def test_ssl_verify_false_passes_verify_false(self):
+        mock_resp = MagicMock()
+        mock_resp.text = BROKER_HTML_ALL_OK
+        mock_resp.raise_for_status.return_value = None
+
+        with patch("broker_monitor.monitor.requests.get", return_value=mock_resp) as mock_get:
+            check_broker("https://test/status", ssl_verify=False)
+
+        _, kwargs = mock_get.call_args
+        assert kwargs["verify"] is False
+
+    def test_ssl_verify_true_passes_verify_true(self):
+        mock_resp = MagicMock()
+        mock_resp.text = BROKER_HTML_ALL_OK
+        mock_resp.raise_for_status.return_value = None
+
+        with patch("broker_monitor.monitor.requests.get", return_value=mock_resp) as mock_get:
+            check_broker("https://test/status", ssl_verify=True)
+
+        _, kwargs = mock_get.call_args
+        assert kwargs["verify"] is True

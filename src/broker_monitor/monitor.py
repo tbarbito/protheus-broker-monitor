@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass
 
 import requests
+import urllib3
 from bs4 import BeautifulSoup
 
 
@@ -17,13 +19,19 @@ class SlaveStatus:
         return self.quarantine not in ("", "-")
 
 
-def check_broker(url: str, timeout: int = 30) -> tuple[bool, list[SlaveStatus]]:
+def check_broker(url: str, timeout: int = 30, ssl_verify: bool = False) -> tuple[bool, list[SlaveStatus]]:
     """
     Requests the broker status page.
     Returns (reachable, slaves). reachable=False means the broker did not respond.
+    ssl_verify=False is the default for corporate Protheus environments with self-signed certs.
     """
     try:
-        response = requests.get(url, timeout=timeout, verify=True)
+        if not ssl_verify:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+                response = requests.get(url, timeout=timeout, verify=False)
+        else:
+            response = requests.get(url, timeout=timeout, verify=True)
         response.raise_for_status()
         return True, parse_broker_page(response.text)
     except requests.RequestException:

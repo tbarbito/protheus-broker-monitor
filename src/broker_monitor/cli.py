@@ -128,7 +128,7 @@ def check(
         raise typer.Exit(1)
 
     console.print(f"\n[cyan]Verificando:[/cyan] {cfg.broker_url}\n")
-    reachable, slaves = check_broker(cfg.broker_url)
+    reachable, slaves = check_broker(cfg.broker_url, ssl_verify=cfg.ssl_verify)
 
     if not reachable:
         console.print("[red]Broker inacessivel.[/red]")
@@ -167,7 +167,7 @@ def _run_once(cfg: Config, dry_run: bool, logger: logging.Logger) -> bool:
     console.print(f"[cyan]Verificando:[/cyan] {cfg.broker_url}")
     logger.info(f"Verificando broker: {cfg.broker_url}")
 
-    reachable, slaves = check_broker(cfg.broker_url)
+    reachable, slaves = check_broker(cfg.broker_url, ssl_verify=cfg.ssl_verify)
 
     if not reachable:
         console.print("[red]Broker inacessivel.[/red]")

@@ -4,6 +4,7 @@
   "logRetentionDays": 7,
   "autoRestart": true,
   "startTimeoutSeconds": 60,
+  "sslVerify": false,
   "cluster": {
     "enabled": false,
     "name": "",

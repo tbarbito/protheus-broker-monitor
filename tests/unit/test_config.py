@@ -53,7 +53,13 @@ class TestLoadConfig:
         assert cfg.log_retention_days == 7
         assert cfg.auto_restart is True
         assert cfg.start_timeout_seconds == 60
+        assert cfg.ssl_verify is False
         assert cfg.email.enabled is False
+
+    def test_ssl_verify_explicit_true(self, tmp_path, config_data):
+        config_data["sslVerify"] = True
+        cfg = load_config(_write(tmp_path, config_data))
+        assert cfg.ssl_verify is True
 
     def test_cluster_disabled_by_default(self, tmp_path, config_data):
         cfg = load_config(_write(tmp_path, config_data))

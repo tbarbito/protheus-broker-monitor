@@ -39,6 +39,7 @@ class Config:
     log_retention_days: int
     auto_restart: bool
     start_timeout_seconds: int
+    ssl_verify: bool
     slaves: list[SlaveConfig]
     cluster: ClusterConfig
     email: EmailConfig
@@ -72,6 +73,7 @@ def load_config(path: Path) -> Config:
         log_retention_days=int(data.get("logRetentionDays", 7)),
         auto_restart=bool(data.get("autoRestart", True)),
         start_timeout_seconds=int(data.get("startTimeoutSeconds", 60)),
+        ssl_verify=bool(data.get("sslVerify", False)),
         slaves=slaves,
         cluster=ClusterConfig(
             enabled=bool(cl.get("enabled", False)),
