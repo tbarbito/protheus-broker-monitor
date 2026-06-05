@@ -54,6 +54,14 @@ copy config.example.json config.json
 
 > **Importante:** o `config.json` esta no `.gitignore`. Nunca faca commit -- ele contem credenciais SMTP.
 
+> **Dica:** o nome do arquivo pode ser qualquer um -- `config.json` e apenas o padrao quando `--config` nao e informado.
+> Use nomes descritivos para gerenciar multiplos ambientes:
+>
+> ```powershell
+> broker-monitor.exe run --config C:\Scripts\agro.json
+> broker-monitor.exe run --config C:\Scripts\marfrig.json
+> ```
+
 ### Referencia completa do config.json
 
 #### Modo standard (sem cluster)
