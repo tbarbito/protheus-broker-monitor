@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
+from .cluster_restarter import restart_cluster_slaves
 from .config import Config, load_config
 from .monitor import SlaveStatus, check_broker, get_quarantined
 from .notifier import send_alert
@@ -203,26 +204,55 @@ def _run_once(cfg: Config, dry_run: bool, logger: logging.Logger) -> bool:
     failed: list[ServiceInfo] = []
     skipped: list[str] = []
 
+    # Resolve all quarantined slaves to ServiceInfo
+    resolved: list[ServiceInfo] = []
     for slave in quarantined:
         info = resolve_service(slave.address, cfg.slave_port_map)
         if not info:
             console.print(f"  [yellow]Fora do mapeamento, pulando:[/yellow] {slave.address}")
             logger.warning(f"Fora do mapeamento: {slave.address}")
             skipped.append(slave.address)
-            continue
-
-        console.print(f"\n  Reiniciando [bold]{info.service_name}[/bold] ({info.address})...")
-        logger.info(f"Reiniciando servico: {info.service_name}")
-
-        ok, state = restart_service(info.service_name, cfg.start_timeout_seconds)
-        if ok:
-            console.print(f"  [green]OK[/green] -- {info.service_name} -> {state}")
-            logger.info(f"Restart OK: {info.service_name} -> {state}")
-            restarted.append(info)
         else:
-            console.print(f"  [red]FALHOU[/red] -- {info.service_name}: {state}")
-            logger.error(f"Restart falhou: {info.service_name} | {state}")
-            failed.append(info)
+            resolved.append(info)
+
+    if not resolved:
+        pass  # nothing to restart, fall through to summary
+
+    elif cfg.cluster.enabled:
+        # --- Cluster mode: parallel stop + taskkill + sequential start ---
+        mode_label = f"cluster [bold]{cfg.cluster.name}[/bold]"
+        console.print(f"\n  Modo cluster. Reiniciando {len(resolved)} recurso(s) em {mode_label}...")
+        for info in resolved:
+            logger.info(f"Reiniciando recurso de cluster: {info.resource_name} (role: {info.role})")
+
+        restarted, failed = restart_cluster_slaves(
+            cluster_name=cfg.cluster.name,
+            infos=resolved,
+            stop_timeout=cfg.cluster.stop_timeout_seconds,
+            start_timeout=cfg.start_timeout_seconds,
+        )
+        for info in restarted:
+            console.print(f"  [green]OK[/green] -- {info.resource_name} -> Online")
+            logger.info(f"Restart OK: {info.resource_name}")
+        for info in failed:
+            console.print(f"  [red]FALHOU[/red] -- {info.resource_name}")
+            logger.error(f"Restart falhou: {info.resource_name}")
+
+    else:
+        # --- Standard mode: sc.exe stop/start per slave ---
+        for info in resolved:
+            console.print(f"\n  Reiniciando [bold]{info.service_name}[/bold] ({info.address})...")
+            logger.info(f"Reiniciando servico: {info.service_name}")
+
+            ok, state = restart_service(info.service_name, cfg.start_timeout_seconds)
+            if ok:
+                console.print(f"  [green]OK[/green] -- {info.service_name} -> {state}")
+                logger.info(f"Restart OK: {info.service_name} -> {state}")
+                restarted.append(info)
+            else:
+                console.print(f"  [red]FALHOU[/red] -- {info.service_name}: {state}")
+                logger.error(f"Restart falhou: {info.service_name} | {state}")
+                failed.append(info)
 
     console.print(
         f"\n[bold]Resumo:[/bold] "

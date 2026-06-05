@@ -10,16 +10,27 @@ Suporta execucao pontual via **Windows Task Scheduler** e modo **daemon** contin
 ## Funcionalidades
 
 - Verifica a pagina de status do Broker e detecta slaves em quarentena
-- Reinicia automaticamente os servicos Windows correspondentes via `sc.exe`
+- Dois modos de restart: **standard** (servicos Windows via `sc.exe`) e **cluster** (Windows Failover Cluster via PowerShell)
+- No modo cluster: stop em paralelo + taskkill forcado + start sequencial com espera de Online
 - Envia email HTML de alerta com o resumo da operacao
 - Grava logs diarios com rotacao automatica
 - Modo `--dry-run` para verificar sem executar nenhuma acao
 - Comando `check` para inspecao rapida do status atual
 
+## Modos de operacao
+
+| Modo | Quando usar | Mecanismo de restart |
+|---|---|---|
+| **Standard** | Servidor standalone, sem cluster | `sc.exe stop` / `sc.exe start` |
+| **Cluster** | Windows Failover Cluster | `Stop-ClusterResource` (paralelo) + `taskkill /F` + `Start-ClusterResource` (sequencial) |
+
+O modo e controlado pelo campo `cluster.enabled` no `config.json`. Um unico plugin, um config por ambiente.
+
 ## Requisitos
 
 - Windows com Python 3.11+
-- O script deve ser executado como **Administrador** (necessario para gerenciar servicos Windows)
+- Executar como **Administrador** (necessario para gerenciar servicos Windows)
+- **Modo cluster apenas:** modulo `FailoverClusters` do PowerShell instalado no servidor (disponivel em Windows Server com a feature Failover Clustering habilitada)
 
 ## Instalacao
 
@@ -45,6 +56,8 @@ copy config.example.json config.json
 
 ### Referencia completa do config.json
 
+#### Modo standard (sem cluster)
+
 ```json
 {
   "brokerUrl": "https://seu-servidor:10000/totvs_broker_query/status",
@@ -52,10 +65,10 @@ copy config.example.json config.json
   "logRetentionDays": 7,
   "autoRestart": true,
   "startTimeoutSeconds": 60,
+  "cluster": {"enabled": false},
   "slaves": [
     {"port": 10001, "serviceName": "NomeDoServico01"},
-    {"port": 10002, "serviceName": "NomeDoServico02"},
-    {"port": 10003, "serviceName": "NomeDoServico03"}
+    {"port": 10002, "serviceName": "NomeDoServico02"}
   ],
   "email": {
     "enabled": true,
@@ -70,16 +83,56 @@ copy config.example.json config.json
 }
 ```
 
+#### Modo cluster (Windows Failover Cluster)
+
+```json
+{
+  "brokerUrl": "https://seu-servidor:10000/totvs_broker_query/status",
+  "logDir": "C:\\Logs\\broker-monitor",
+  "logRetentionDays": 7,
+  "autoRestart": true,
+  "startTimeoutSeconds": 60,
+  "cluster": {
+    "enabled": true,
+    "name": "NOME_DO_CLUSTER",
+    "stopTimeoutSeconds": 60
+  },
+  "slaves": [
+    {
+      "port": 10001,
+      "resourceName": "Totvs AppServer Slv01 PRD",
+      "role": "NOME_DA_ROLE_NO_CLUSTER"
+    },
+    {
+      "port": 10002,
+      "resourceName": "Totvs AppServer Slv02 PRD",
+      "role": "NOME_DA_ROLE_NO_CLUSTER"
+    }
+  ],
+  "email": { "...": "..." }
+}
+```
+
+> Em ambientes com cluster, `serviceName` pode ser omitido nos slaves -- apenas `resourceName` e `role` sao usados.
+> Em ambientes sem cluster, `resourceName` e `role` sao ignorados -- apenas `serviceName` e usado.
+
+#### Tabela de campos
+
 | Campo | Tipo | Padrao | Descricao |
 |---|---|---|---|
 | `brokerUrl` | string | **obrigatorio** | URL completa da pagina de status do Broker Protheus |
 | `logDir` | string | `logs` | Diretorio onde os arquivos de log serao gravados |
 | `logRetentionDays` | int | `7` | Numero de dias para manter os arquivos de log |
 | `autoRestart` | bool | `true` | Se `false`, apenas registra os slaves em quarentena sem reiniciar |
-| `startTimeoutSeconds` | int | `60` | Tempo maximo (em segundos) aguardando o servico atingir estado RUNNING apos o start |
-| `slaves` | array | `[]` | Lista de slaves monitorados. Cada item mapeia uma porta a um nome de servico Windows (ver abaixo) |
+| `startTimeoutSeconds` | int | `60` | Segundos aguardando o servico/recurso atingir estado ativo apos o start |
+| `cluster.enabled` | bool | `false` | Habilita o modo Windows Failover Cluster |
+| `cluster.name` | string | `""` | Nome do cluster (conforme exibido no Failover Cluster Manager) |
+| `cluster.stopTimeoutSeconds` | int | `60` | Timeout para o stop paralelo dos recursos de cluster |
+| `slaves` | array | `[]` | Lista de slaves monitorados com seus respectivos mapeamentos |
 | `slaves[].port` | int | **obrigatorio** | Porta do slave conforme exibida na pagina de status do Broker |
-| `slaves[].serviceName` | string | **obrigatorio** | Nome exato do servico Windows correspondente (conforme exibido em `services.msc`) |
+| `slaves[].serviceName` | string | - | **(Standard)** Nome exato do servico Windows (conforme `services.msc`) |
+| `slaves[].resourceName` | string | - | **(Cluster)** Nome exato do recurso no Failover Cluster Manager |
+| `slaves[].role` | string | - | **(Cluster)** Nome da role (grupo de cluster) a qual o recurso pertence |
 | `email.enabled` | bool | `false` | Habilita o envio de emails de alerta |
 | `email.smtpServer` | string | - | Endereco do servidor SMTP |
 | `email.smtpPort` | int | `587` | Porta do servidor SMTP |
@@ -89,17 +142,18 @@ copy config.example.json config.json
 | `email.username` | string | - | Usuario para autenticacao SMTP |
 | `email.password` | string | - | Senha para autenticacao SMTP |
 
-### Sobre portas e nomes de servicos
+### Sobre portas e nomes de servicos / recursos
 
-O Protheus nao tem um padrao fixo de portas ou nomes de servico -- cada ambiente e configurado
-de acordo com as politicas da empresa. Por isso, o mapeamento e **totalmente explicito** no config:
-voce declara exatamente qual porta corresponde a qual servico Windows, sem suposicoes.
+O Protheus nao tem um padrao fixo de portas ou nomes -- cada ambiente e configurado de acordo com
+as politicas da empresa. O mapeamento e **totalmente explicito** no config, sem suposicoes.
 
-**Para descobrir as portas:** acesse a URL configurada em `brokerUrl` no browser. A pagina de
-status do Broker lista todos os slaves com seus respectivos enderecos `IP:porta`.
+**Para descobrir as portas:** acesse a URL em `brokerUrl` no browser. A pagina de status do Broker
+lista todos os slaves com seus enderecos `IP:porta`.
 
-**Para descobrir os nomes dos servicos:** abra `services.msc` no servidor Windows onde o Protheus
-esta instalado e localize os servicos de AppServer/Slave.
+**Modo standard -- para descobrir os nomes dos servicos:** abra `services.msc` no servidor Windows.
+
+**Modo cluster -- para descobrir os nomes dos recursos e roles:** abra o **Failover Cluster Manager**
+e navegue ate Roles. O nome do recurso e o nome exato exibido na lista de recursos da role.
 
 Exemplos de configuracoes validas:
 

@@ -4,18 +4,28 @@ import subprocess
 import time
 from dataclasses import dataclass
 
+from .config import SlaveConfig
+
 
 @dataclass
 class ServiceInfo:
     address: str
     port: int
-    service_name: str
+    service_name: str | None = None      # standard mode
+    resource_name: str | None = None     # cluster mode
+    role: str | None = None              # cluster mode
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable identifier regardless of mode."""
+        return self.resource_name or self.service_name or f"port:{self.port}"
 
 
-def resolve_service(address: str, port_map: dict[int, str]) -> ServiceInfo | None:
+def resolve_service(address: str, port_map: dict[int, SlaveConfig]) -> ServiceInfo | None:
     """
-    Maps an IP:port address to a Windows service name using the explicit port map
+    Maps an IP:port address to a ServiceInfo using the explicit port map
     defined in config.json. Returns None if the port is not mapped.
+    Works for both standard (serviceName) and cluster (resourceName/role) modes.
     """
     parts = address.split(":")
     if len(parts) < 2:
@@ -26,12 +36,22 @@ def resolve_service(address: str, port_map: dict[int, str]) -> ServiceInfo | Non
     except ValueError:
         return None
 
-    service_name = port_map.get(port)
-    if not service_name:
+    slave = port_map.get(port)
+    if not slave:
         return None
 
-    return ServiceInfo(address=address, port=port, service_name=service_name)
+    return ServiceInfo(
+        address=address,
+        port=port,
+        service_name=slave.service_name,
+        resource_name=slave.resource_name,
+        role=slave.role,
+    )
 
+
+# ---------------------------------------------------------------------------
+# Standard mode (non-cluster) -- sc.exe
+# ---------------------------------------------------------------------------
 
 def get_service_state(service_name: str) -> str:
     result = subprocess.run(

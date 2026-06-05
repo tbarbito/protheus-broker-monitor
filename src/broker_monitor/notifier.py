@@ -70,11 +70,11 @@ def _build_email(
         """
 
         if restarted:
-            items = "".join(f"<li>{s.service_name} ({s.address})</li>" for s in restarted)
+            items = "".join(f"<li>{s.display_name} ({s.address})</li>" for s in restarted)
             content += f"<p style='margin-top:14px'><b style='color:green'>Reiniciados com sucesso ({len(restarted)}):</b><ul>{items}</ul></p>"
 
         if failed:
-            items = "".join(f"<li>{s.service_name} ({s.address})</li>" for s in failed)
+            items = "".join(f"<li>{s.display_name} ({s.address})</li>" for s in failed)
             content += f"<p style='margin-top:14px'><b style='color:red'>FALHA no restart ({len(failed)}) -- intervencao manual necessaria:</b><ul>{items}</ul></p>"
 
         if skipped:

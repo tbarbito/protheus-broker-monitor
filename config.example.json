@@ -4,10 +4,24 @@
   "logRetentionDays": 7,
   "autoRestart": true,
   "startTimeoutSeconds": 60,
+  "cluster": {
+    "enabled": false,
+    "name": "",
+    "stopTimeoutSeconds": 60
+  },
   "slaves": [
-    {"port": 10001, "serviceName": "NomeDoServico01"},
-    {"port": 10002, "serviceName": "NomeDoServico02"},
-    {"port": 10003, "serviceName": "NomeDoServico03"}
+    {
+      "port": 10001,
+      "serviceName": "NomeDoServico01",
+      "resourceName": "Nome do Recurso de Cluster 01",
+      "role": "NomeDaRoleNoCluster"
+    },
+    {
+      "port": 10002,
+      "serviceName": "NomeDoServico02",
+      "resourceName": "Nome do Recurso de Cluster 02",
+      "role": "NomeDaRoleNoCluster"
+    }
   ],
   "email": {
     "enabled": true,

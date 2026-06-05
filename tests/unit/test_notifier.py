@@ -24,8 +24,8 @@ def _email_cfg(enabled: bool = True) -> EmailConfig:
 
 
 QUARANTINED = [SlaveStatus("10.0.0.1:10002", "QUARANTINE_TIMEOUT")]
-RESTARTED   = [ServiceInfo("10.0.0.1:10002", 2, "TestSlv02PRD")]
-FAILED      = [ServiceInfo("10.0.0.1:10003", 3, "TestSlv03PRD")]
+RESTARTED   = [ServiceInfo("10.0.0.1:10002", 10002, service_name="TestSlv02PRD")]
+FAILED      = [ServiceInfo("10.0.0.1:10003", 10003, service_name="TestSlv03PRD")]
 
 
 class TestBuildEmail:
@@ -43,12 +43,12 @@ class TestBuildEmail:
 
     def test_body_contains_restarted_service(self):
         _, body = _build_email(QUARANTINED, RESTARTED, [], [])
-        assert "TestSlv02PRD" in body
+        assert "TestSlv02PRD" in body  # display_name
         assert "Reiniciados" in body
 
     def test_body_contains_failed_service(self):
         _, body = _build_email(QUARANTINED, [], FAILED, [])
-        assert "TestSlv03PRD" in body
+        assert "TestSlv03PRD" in body  # display_name
         assert "FALHA" in body
 
     def test_body_contains_skipped(self):

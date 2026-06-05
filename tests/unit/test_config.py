@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from broker_monitor.config import Config, EmailConfig, SlaveConfig, load_config
+from broker_monitor.config import ClusterConfig, Config, EmailConfig, SlaveConfig, load_config
 
 
 def _write(tmp_path: Path, data: dict) -> Path:
@@ -32,9 +32,9 @@ class TestLoadConfig:
     def test_slave_port_map(self, tmp_path, config_data):
         cfg = load_config(_write(tmp_path, config_data))
         m = cfg.slave_port_map
-        assert m[10001] == "TestSlv01PRD"
-        assert m[10002] == "TestSlv02PRD"
-        assert m[10003] == "TestSlv03PRD"
+        assert m[10001].service_name == "TestSlv01PRD"
+        assert m[10002].service_name == "TestSlv02PRD"
+        assert m[10003].service_name == "TestSlv03PRD"
 
     def test_slaves_empty_by_default(self, tmp_path):
         cfg = load_config(_write(tmp_path, {"brokerUrl": "http://host/status"}))
@@ -55,17 +55,39 @@ class TestLoadConfig:
         assert cfg.start_timeout_seconds == 60
         assert cfg.email.enabled is False
 
-    def test_custom_ports_and_service_names(self, tmp_path):
+    def test_cluster_disabled_by_default(self, tmp_path, config_data):
+        cfg = load_config(_write(tmp_path, config_data))
+        assert cfg.cluster.enabled is False
+        assert cfg.cluster.name == ""
+
+    def test_cluster_config(self, tmp_path, config_data):
+        config_data["cluster"] = {
+            "enabled": True,
+            "name": "MYCLUSTER",
+            "stopTimeoutSeconds": 45,
+        }
+        cfg = load_config(_write(tmp_path, config_data))
+        assert cfg.cluster.enabled is True
+        assert cfg.cluster.name == "MYCLUSTER"
+        assert cfg.cluster.stop_timeout_seconds == 45
+
+    def test_slave_with_cluster_fields(self, tmp_path):
         data = {
-            "brokerUrl": "http://host:9999/status",
+            "brokerUrl": "http://host/status",
             "slaves": [
-                {"port": 9001, "serviceName": "MeuServico_A"},
-                {"port": 9002, "serviceName": "MeuServico_B"},
+                {
+                    "port": 10001,
+                    "serviceName": "Svc01",
+                    "resourceName": "Totvs AppServer Slv01 PRD",
+                    "role": "ROLE_A",
+                },
             ],
         }
         cfg = load_config(_write(tmp_path, data))
-        assert cfg.slave_port_map[9001] == "MeuServico_A"
-        assert cfg.slave_port_map[9002] == "MeuServico_B"
+        s = cfg.slaves[0]
+        assert s.service_name == "Svc01"
+        assert s.resource_name == "Totvs AppServer Slv01 PRD"
+        assert s.role == "ROLE_A"
 
     def test_missing_required_field_raises(self, tmp_path):
         with pytest.raises(KeyError):
