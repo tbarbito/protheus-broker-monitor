@@ -1,5 +1,7 @@
 {
   "brokerUrl": "https://seu-servidor:10000/totvs_broker_query/status",
+  "environmentName": "Producao",
+  "allowedWeekdays": [0, 1, 2, 3, 4, 5],
   "logDir": "C:\\Logs\\broker-monitor",
   "logRetentionDays": 7,
   "autoRestart": true,

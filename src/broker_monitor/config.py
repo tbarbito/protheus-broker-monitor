@@ -35,6 +35,7 @@ class EmailConfig:
 @dataclass
 class Config:
     broker_url: str
+    environment_name: str
     log_dir: Path
     log_retention_days: int
     auto_restart: bool
@@ -43,6 +44,7 @@ class Config:
     slaves: list[SlaveConfig]
     cluster: ClusterConfig
     email: EmailConfig
+    allowed_weekdays: list[int] | None = None  # 0=seg, 6=dom; None=sem restricao
 
     @property
     def slave_port_map(self) -> dict[int, SlaveConfig]:
@@ -67,14 +69,19 @@ def load_config(path: Path) -> Config:
         for s in data.get("slaves", [])
     ]
 
+    raw_weekdays = data.get("allowedWeekdays")
+    allowed_weekdays = [int(d) for d in raw_weekdays] if raw_weekdays is not None else None
+
     return Config(
         broker_url=data["brokerUrl"],
+        environment_name=data.get("environmentName", ""),
         log_dir=Path(data.get("logDir", "logs")),
         log_retention_days=int(data.get("logRetentionDays", 7)),
         auto_restart=bool(data.get("autoRestart", True)),
         start_timeout_seconds=int(data.get("startTimeoutSeconds", 60)),
         ssl_verify=bool(data.get("sslVerify", False)),
         slaves=slaves,
+        allowed_weekdays=allowed_weekdays,
         cluster=ClusterConfig(
             enabled=bool(cl.get("enabled", False)),
             name=cl.get("name", ""),

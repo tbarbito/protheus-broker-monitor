@@ -162,7 +162,15 @@ def check(
 
 
 def _run_once(cfg: Config, dry_run: bool, logger: logging.Logger) -> bool:
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now()
+    ts = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    if cfg.allowed_weekdays is not None and now.weekday() not in cfg.allowed_weekdays:
+        day_name = now.strftime("%A")
+        console.print(f"[yellow]Dia {day_name} nao esta em allowedWeekdays. Execucao ignorada.[/yellow]")
+        logger.info(f"Execucao ignorada: dia {day_name} fora de allowedWeekdays={cfg.allowed_weekdays}")
+        return True
+
     console.rule(f"[dim]{ts}[/dim]", style="dim")
     console.print(f"[cyan]Verificando:[/cyan] {cfg.broker_url}")
     logger.info(f"Verificando broker: {cfg.broker_url}")
@@ -173,7 +181,7 @@ def _run_once(cfg: Config, dry_run: bool, logger: logging.Logger) -> bool:
         console.print("[red]Broker inacessivel.[/red]")
         logger.error("Broker inacessivel.")
         if not dry_run:
-            _try_send(cfg, [], [], [], [], broker_unreachable=True, logger=logger)
+            _try_send(cfg, [], [], [], [], broker_unreachable=True, logger=logger, broker_url=cfg.broker_url)
         return False
 
     logger.info(f"Broker online. Slaves encontrados: {len(slaves)}")
@@ -265,7 +273,7 @@ def _run_once(cfg: Config, dry_run: bool, logger: logging.Logger) -> bool:
     )
 
     if restarted or failed:
-        _try_send(cfg, quarantined, restarted, failed, skipped, logger=logger)
+        _try_send(cfg, quarantined, restarted, failed, skipped, logger=logger, broker_url=cfg.broker_url)
 
     return len(failed) == 0
 
@@ -278,11 +286,15 @@ def _try_send(
     skipped: list[str],
     logger: logging.Logger,
     broker_unreachable: bool = False,
+    broker_url: str = "",
 ) -> None:
     if not cfg.email.enabled:
         return
     try:
-        send_alert(cfg.email, quarantined, restarted, failed, skipped, broker_unreachable)
+        send_alert(
+            cfg.email, quarantined, restarted, failed, skipped,
+            broker_unreachable, cfg.environment_name, broker_url,
+        )
         console.print("[green]Email de alerta enviado.[/green]")
         logger.info("Email enviado.")
     except Exception as exc:

@@ -69,6 +69,8 @@ copy config.example.json config.json
 ```json
 {
   "brokerUrl": "https://seu-servidor:10000/totvs_broker_query/status",
+  "environmentName": "Producao",
+  "allowedWeekdays": [0, 1, 2, 3, 4, 5],
   "logDir": "C:\\Logs\\broker-monitor",
   "logRetentionDays": 7,
   "autoRestart": true,
@@ -96,6 +98,8 @@ copy config.example.json config.json
 ```json
 {
   "brokerUrl": "https://seu-servidor:10000/totvs_broker_query/status",
+  "environmentName": "Producao Cluster",
+  "allowedWeekdays": [0, 1, 2, 3, 4, 5],
   "logDir": "C:\\Logs\\broker-monitor",
   "logRetentionDays": 7,
   "autoRestart": true,
@@ -129,6 +133,8 @@ copy config.example.json config.json
 | Campo | Tipo | Padrao | Descricao |
 |---|---|---|---|
 | `brokerUrl` | string | **obrigatorio** | URL completa da pagina de status do Broker Protheus |
+| `environmentName` | string | `""` | Nome amigavel do ambiente. Exibido no assunto do email entre colchetes (ex: `[Producao]`) e a URL do broker e incluida no corpo da mensagem. Util para identificar o ambiente de origem quando ha multiplos monitores. |
+| `allowedWeekdays` | array | *(sem restricao)* | Dias da semana em que o monitor pode executar acoes, como inteiros (0=segunda, 6=domingo). Se omitido, executa em qualquer dia. Exemplo: `[0,1,2,3,4,5]` restringe a segunda-sabado. |
 | `logDir` | string | `logs` | Diretorio onde os arquivos de log serao gravados |
 | `logRetentionDays` | int | `7` | Numero de dias para manter os arquivos de log |
 | `autoRestart` | bool | `true` | Se `false`, apenas registra os slaves em quarentena sem reiniciar |
