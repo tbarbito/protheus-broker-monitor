@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 from typer.testing import CliRunner
 
+from broker_monitor import __version__
 from broker_monitor.cli import app
 from tests.conftest import (
     BROKER_HTML_ALL_OK,
@@ -37,7 +39,7 @@ class TestVersionFlag:
     def test_shows_version(self):
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "1.0.0" in result.output
+        assert __version__ in result.output
 
 
 class TestRunCommand:
@@ -64,7 +66,8 @@ class TestRunCommand:
         start_ok  = _mock_sc_ok(0)
         running   = _mock_sc_ok(0, "STATE: RUNNING")
 
-        with patch("broker_monitor.monitor.requests.get", return_value=mock_resp), \
+        with patch("broker_monitor.restarter._is_windows", return_value=True), \
+             patch("broker_monitor.monitor.requests.get", return_value=mock_resp), \
              patch("broker_monitor.restarter.subprocess.run", side_effect=[stop_ok, start_ok, running]), \
              patch("broker_monitor.restarter.time.sleep"):
             result = runner.invoke(app, ["run", "--config", str(config_file)])
@@ -100,13 +103,40 @@ class TestRunCommand:
         start_ok = _mock_sc_ok(0)
         running  = _mock_sc_ok(0, "STATE: RUNNING")
 
-        with patch("broker_monitor.monitor.requests.get", return_value=mock_resp), \
+        with patch("broker_monitor.restarter._is_windows", return_value=True), \
+             patch("broker_monitor.monitor.requests.get", return_value=mock_resp), \
              patch("broker_monitor.restarter.subprocess.run",
                    side_effect=[stop_ok, start_ok, running, stop_ok, start_ok, running]), \
              patch("broker_monitor.restarter.time.sleep"):
             result = runner.invoke(app, ["run", "--config", str(config_file)])
 
         assert "Reiniciados: 2" in result.output
+
+
+class TestClusterGuard:
+    def test_cluster_blocked_on_non_windows(self, tmp_path, config_data):
+        config_data["cluster"] = {"enabled": True, "name": "MyCluster", "stopTimeoutSeconds": 60}
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(config_data), encoding="utf-8")
+
+        with patch("broker_monitor.cli.sys.platform", "linux"):
+            result = runner.invoke(app, ["run", "--config", str(path)])
+
+        assert result.exit_code == 1
+        assert "cluster" in result.output.lower()
+
+    def test_cluster_allowed_on_windows(self, tmp_path, config_data):
+        config_data["cluster"] = {"enabled": True, "name": "MyCluster", "stopTimeoutSeconds": 60}
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(config_data), encoding="utf-8")
+
+        mock_resp = _mock_response(BROKER_HTML_ALL_OK)
+        with patch("broker_monitor.cli.sys.platform", "win32"), \
+             patch("broker_monitor.monitor.requests.get", return_value=mock_resp):
+            result = runner.invoke(app, ["run", "--config", str(path)])
+
+        # Broker sem quarentena -> nao tenta cluster, apenas conclui sem ser bloqueado
+        assert result.exit_code == 0
 
 
 class TestCheckCommand:

@@ -88,6 +88,16 @@ def run(
         console.print(f"[red]Erro ao ler config:[/red] {exc}")
         raise typer.Exit(1)
 
+    if cfg.cluster.enabled and sys.platform != "win32":
+        console.print(
+            "[red]Modo cluster nao suportado neste sistema operacional.[/red]\n"
+            "O modo cluster depende do Windows Failover Cluster (PowerShell) e so "
+            "funciona no Windows.\n"
+            "No Linux, defina [bold]\"cluster\": {\"enabled\": false}[/bold] no config "
+            "e use o modo standard (systemctl)."
+        )
+        raise typer.Exit(1)
+
     logger = _setup_logger(cfg.log_dir, cfg.log_retention_days)
 
     if daemon:

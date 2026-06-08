@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 
@@ -50,10 +51,42 @@ def resolve_service(address: str, port_map: dict[int, SlaveConfig]) -> ServiceIn
 
 
 # ---------------------------------------------------------------------------
-# Standard mode (non-cluster) -- sc.exe
+# Public dispatch -- selects the backend at runtime based on the host OS.
+#
+# Windows -> sc.exe (Service Control Manager)
+# Linux   -> systemctl (systemd)
+#
+# The standard (non-cluster) mode works on both platforms. The cluster mode
+# (cluster_restarter.py) relies on Windows Failover Clustering and is therefore
+# Windows-only; the CLI blocks cluster.enabled on non-Windows hosts.
 # ---------------------------------------------------------------------------
 
+def _is_windows() -> bool:
+    return sys.platform == "win32"
+
+
 def get_service_state(service_name: str) -> str:
+    """Returns RUNNING / STOPPED / UNKNOWN for the given service/unit."""
+    if _is_windows():
+        return _get_service_state_windows(service_name)
+    return _get_service_state_systemd(service_name)
+
+
+def restart_service(service_name: str, start_timeout: int) -> tuple[bool, str]:
+    """
+    Stops and starts a service, then waits until it reaches RUNNING.
+    Returns (success, description). Dispatches to the platform backend.
+    """
+    if _is_windows():
+        return _restart_service_windows(service_name, start_timeout)
+    return _restart_service_systemd(service_name, start_timeout)
+
+
+# ---------------------------------------------------------------------------
+# Windows backend -- sc.exe
+# ---------------------------------------------------------------------------
+
+def _get_service_state_windows(service_name: str) -> str:
     result = subprocess.run(
         ["sc", "query", service_name],
         capture_output=True,
@@ -66,7 +99,7 @@ def get_service_state(service_name: str) -> str:
     return "UNKNOWN"
 
 
-def restart_service(service_name: str, start_timeout: int) -> tuple[bool, str]:
+def _restart_service_windows(service_name: str, start_timeout: int) -> tuple[bool, str]:
     """
     Stops and starts a Windows service via sc.exe.
     Returns (success, description).
@@ -91,9 +124,61 @@ def restart_service(service_name: str, start_timeout: int) -> tuple[bool, str]:
         return False, f"sc start falhou (rc={start.returncode}): {start.stderr.strip()}"
 
     for _ in range(start_timeout):
-        if get_service_state(service_name) == "RUNNING":
+        if _get_service_state_windows(service_name) == "RUNNING":
             return True, "RUNNING"
         time.sleep(1)
 
-    final = get_service_state(service_name)
+    final = _get_service_state_windows(service_name)
     return False, f"Timeout aguardando RUNNING -- estado final: {final}"
+
+
+# ---------------------------------------------------------------------------
+# Linux backend -- systemctl (systemd)
+#
+# O AppServer Protheus precisa estar registrado como uma unit systemd, ex:
+#   /etc/systemd/system/appserver_slave01.service
+# Nesse cenario o campo "serviceName" do config.json deve conter o nome da
+# unit (ex: "appserver_slave01" ou "appserver_slave01.service").
+#
+# O processo que executa o monitor precisa de permissao para reiniciar a unit
+# (rodar como root, ou via regra sudoers/polkit para "systemctl restart").
+# ---------------------------------------------------------------------------
+
+def _get_service_state_systemd(service_name: str) -> str:
+    """
+    Uses `systemctl is-active`. Possible stdout values: active, inactive,
+    failed, activating, deactivating, unknown.
+    """
+    result = subprocess.run(
+        ["systemctl", "is-active", service_name],
+        capture_output=True,
+        text=True,
+    )
+    state = result.stdout.strip()
+    if state == "active":
+        return "RUNNING"
+    if state in ("inactive", "failed", "deactivating"):
+        return "STOPPED"
+    return "UNKNOWN"
+
+
+def _restart_service_systemd(service_name: str, start_timeout: int) -> tuple[bool, str]:
+    """
+    Restarts a systemd unit via `systemctl restart` (stop+start atomic),
+    then waits until it reports `active`. Returns (success, description).
+    """
+    restart = subprocess.run(
+        ["systemctl", "restart", service_name],
+        capture_output=True,
+        text=True,
+    )
+    if restart.returncode != 0:
+        return False, f"systemctl restart falhou (rc={restart.returncode}): {restart.stderr.strip()}"
+
+    for _ in range(start_timeout):
+        if _get_service_state_systemd(service_name) == "RUNNING":
+            return True, "RUNNING"
+        time.sleep(1)
+
+    final = _get_service_state_systemd(service_name)
+    return False, f"Timeout aguardando active -- estado final: {final}"
