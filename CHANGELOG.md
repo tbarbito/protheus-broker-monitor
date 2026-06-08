@@ -5,6 +5,22 @@ Todas as mudancas relevantes deste projeto sao documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e este projeto adota [Versionamento Semantico](https://semver.org/lang/pt-BR/).
 
+## [1.1.1] - 2026-06-08
+
+### Adicionado
+
+- No backend Linux, o `systemctl restart` agora usa **`sudo -n` automaticamente** quando
+  o monitor nao roda como root (detectado via `os.geteuid()`). Isso permite rodar o
+  monitor como usuario comum, apoiado em uma regra `sudoers` NOPASSWD escopada para os
+  servicos Protheus. Quando ja e root, chama `systemctl` diretamente.
+- `systemctl is-active` (read-only) permanece sem `sudo` — nao requer privilegio.
+
+### Testado
+
+- Validado de ponta a ponta em Linux real (Ubuntu 24.04) contra um broker Protheus
+  (`appsrvlinux -balance_http`): deteccao de quarentena, restart via `sudo -n` sem senha,
+  fechamento do ciclo (quarentena limpa), `--dry-run` e tratamento de broker inacessivel.
+
 ## [1.1.0] - 2026-06-08
 
 ### Adicionado
@@ -45,5 +61,6 @@ e este projeto adota [Versionamento Semantico](https://semver.org/lang/pt-BR/).
 - Logs diarios com rotacao automatica.
 - Build portable via PyInstaller (`build.ps1`).
 
+[1.1.1]: https://github.com/tbarbito/protheus-broker-monitor/releases/tag/v1.1.1
 [1.1.0]: https://github.com/tbarbito/protheus-broker-monitor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/tbarbito/protheus-broker-monitor/releases/tag/v1.0.0

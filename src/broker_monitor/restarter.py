@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -144,10 +145,21 @@ def _restart_service_windows(service_name: str, start_timeout: int) -> tuple[boo
 # (rodar como root, ou via regra sudoers/polkit para "systemctl restart").
 # ---------------------------------------------------------------------------
 
+def _needs_sudo() -> bool:
+    """
+    Reiniciar uma unit do sistema exige privilegio. Se o processo NAO roda como
+    root, anexamos `sudo -n` (non-interactive) ao comando -- isso depende de uma
+    regra sudoers NOPASSWD para `systemctl restart <unit>` (ver README > Linux).
+    Quando ja somos root, chamamos systemctl diretamente.
+    """
+    return hasattr(os, "geteuid") and os.geteuid() != 0
+
+
 def _get_service_state_systemd(service_name: str) -> str:
     """
     Uses `systemctl is-active`. Possible stdout values: active, inactive,
     failed, activating, deactivating, unknown.
+    `is-active` is read-only and works without privileges, so no sudo here.
     """
     result = subprocess.run(
         ["systemctl", "is-active", service_name],
@@ -166,12 +178,13 @@ def _restart_service_systemd(service_name: str, start_timeout: int) -> tuple[boo
     """
     Restarts a systemd unit via `systemctl restart` (stop+start atomic),
     then waits until it reports `active`. Returns (success, description).
+    Prefixes `sudo -n` automatically when not running as root.
     """
-    restart = subprocess.run(
-        ["systemctl", "restart", service_name],
-        capture_output=True,
-        text=True,
-    )
+    cmd = ["systemctl", "restart", service_name]
+    if _needs_sudo():
+        cmd = ["sudo", "-n"] + cmd
+
+    restart = subprocess.run(cmd, capture_output=True, text=True)
     if restart.returncode != 0:
         return False, f"systemctl restart falhou (rc={restart.returncode}): {restart.stderr.strip()}"
 
