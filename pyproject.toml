@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "protheus-broker-monitor"
-version = "1.0.0"
+version = "1.1.0"
 description = "Monitora o Broker Protheus e reinicia automaticamente slaves em quarentena"
 readme = "README.md"
 requires-python = ">=3.11"

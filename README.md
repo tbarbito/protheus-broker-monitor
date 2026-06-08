@@ -1,7 +1,8 @@
 # protheus-broker-monitor
 
 Monitora o Broker do Protheus e reinicia automaticamente os slaves em quarentena.
-Suporta execucao pontual via **Windows Task Scheduler** e modo **daemon** continuo.
+Funciona em **Windows** (`sc.exe` / Failover Cluster) e em **Linux** (`systemctl`).
+Suporta execucao pontual (Windows Task Scheduler / cron / systemd timer) e modo **daemon** continuo.
 
 > **Aviso:** este projeto nao e uma ferramenta oficial nem homologada pela TOTVS S.A.
 > Foi idealizado de forma pessoal como um facilitador para o monitoramento e recuperacao automatica
@@ -10,7 +11,8 @@ Suporta execucao pontual via **Windows Task Scheduler** e modo **daemon** contin
 ## Funcionalidades
 
 - Verifica a pagina de status do Broker e detecta slaves em quarentena
-- Dois modos de restart: **standard** (servicos Windows via `sc.exe`) e **cluster** (Windows Failover Cluster via PowerShell)
+- Restart multiplataforma no modo **standard**: servicos Windows via `sc.exe` ou unidades systemd via `systemctl` (selecao automatica conforme o SO)
+- Modo **cluster** (apenas Windows): Windows Failover Cluster via PowerShell
 - No modo cluster: stop em paralelo + taskkill forcado + start sequencial com espera de Online
 - Envia email HTML de alerta com o resumo da operacao
 - Grava logs diarios com rotacao automatica
@@ -19,18 +21,55 @@ Suporta execucao pontual via **Windows Task Scheduler** e modo **daemon** contin
 
 ## Modos de operacao
 
-| Modo | Quando usar | Mecanismo de restart |
-|---|---|---|
-| **Standard** | Servidor standalone, sem cluster | `sc.exe stop` / `sc.exe start` |
-| **Cluster** | Windows Failover Cluster | `Stop-ClusterResource` (paralelo) + `taskkill /F` + `Start-ClusterResource` (sequencial) |
+| Modo | Plataforma | Quando usar | Mecanismo de restart |
+|---|---|---|---|
+| **Standard** | Windows | Servidor standalone, sem cluster | `sc.exe stop` / `sc.exe start` |
+| **Standard** | Linux | Servidor standalone, sem cluster | `systemctl restart <unit>` |
+| **Cluster** | Windows | Windows Failover Cluster | `Stop-ClusterResource` (paralelo) + `taskkill /F` + `Start-ClusterResource` (sequencial) |
 
-O modo e controlado pelo campo `cluster.enabled` no `config.json`. Um unico plugin, um config por ambiente.
+O modo e controlado pelo campo `cluster.enabled` no `config.json`. O backend do modo standard
+(`sc.exe` ou `systemctl`) e escolhido automaticamente conforme o sistema operacional. Um unico
+codigo-fonte, um config por ambiente.
+
+> **Cluster e exclusivo do Windows.** Se `cluster.enabled: true` for usado no Linux, o programa
+> aborta com mensagem explicativa -- o Windows Failover Cluster nao tem equivalente no Linux.
 
 ## Requisitos
 
-- Windows com Python 3.11+
+### Windows
+
+- Windows Server 2016+ com Python 3.11+ (apenas na maquina de build)
 - Executar como **Administrador** (necessario para gerenciar servicos Windows)
 - **Modo cluster apenas:** modulo `FailoverClusters` do PowerShell instalado no servidor (disponivel em Windows Server com a feature Failover Clustering habilitada)
+
+### Linux
+
+- Distribuicao com **systemd** (Ubuntu, RHEL, Rocky, Debian etc.) e Python 3.11+ (apenas na maquina de build)
+- Cada AppServer Protheus deve estar registrado como uma **unit systemd**, ex:
+  `/etc/systemd/system/appserver_slave01.service`. O campo `serviceName` do `config.json`
+  deve conter o nome dessa unit (ex: `appserver_slave01` ou `appserver_slave01.service`).
+- O processo precisa de permissao para reiniciar a unit: rodar como **root**, ou conceder
+  permissao pontual via `sudoers` (ex: `monitor ALL=(root) NOPASSWD: /usr/bin/systemctl restart appserver_slave01.service`)
+- O modo **cluster** nao se aplica ao Linux (deixe `cluster.enabled: false`)
+
+> **Exemplo minimo de unit systemd do AppServer** (`/etc/systemd/system/appserver_slave01.service`):
+>
+> ```ini
+> [Unit]
+> Description=Protheus AppServer Slave 01
+> After=network.target
+>
+> [Service]
+> Type=simple
+> WorkingDirectory=/totvs/protheus/bin/appserver_slave01
+> ExecStart=/totvs/protheus/bin/appserver_slave01/appsrvlinux -console
+> Restart=on-failure
+>
+> [Install]
+> WantedBy=multi-user.target
+> ```
+>
+> Depois: `sudo systemctl daemon-reload && sudo systemctl enable --now appserver_slave01`
 
 ## Instalacao
 
@@ -228,11 +267,17 @@ Pressione `Ctrl+C` para encerrar.
 
 Ambientes corporativos frequentemente bloqueiam o acesso a repositorios externos (GitHub, PyPI)
 nos servidores de producao. Para esses casos, gere um executavel standalone na sua maquina
-de desenvolvimento (que tem acesso a internet) e copie apenas o `.exe` para o servidor destino.
+de desenvolvimento (que tem acesso a internet) e copie apenas o binario para o servidor destino.
+
+> **Atencao:** o PyInstaller **nao faz cross-compilation**. Gere o `.exe` em uma maquina
+> **Windows** (`build.ps1`) e o binario **Linux** em uma maquina **Linux** (`build.sh`).
+> Cada build so produz o executavel do SO onde foi executado.
 
 ### Como gerar o executavel
 
-Na sua maquina de desenvolvimento (com Python e acesso a internet):
+#### Windows (gera `broker-monitor.exe`)
+
+Na sua maquina de desenvolvimento Windows (com Python e acesso a internet):
 
 ```powershell
 # Clone o repositorio e entre na pasta
@@ -243,12 +288,34 @@ cd protheus-broker-monitor
 .\build.ps1
 ```
 
-O script instala o PyInstaller automaticamente se necessario e gera:
+Resultado:
 
-```
+```text
 dist\
-  broker-monitor.exe   # executavel standalone (~15 MB)
+  broker-monitor.exe   # executavel standalone Windows (~15 MB)
 ```
+
+#### Linux (gera `broker-monitor`)
+
+Na sua maquina de desenvolvimento Linux (com Python e acesso a internet):
+
+```bash
+# Clone o repositorio e entre na pasta
+git clone https://github.com/tbarbito/protheus-broker-monitor.git
+cd protheus-broker-monitor
+
+# Execute o script de build
+./build.sh
+```
+
+Resultado:
+
+```text
+dist/
+  broker-monitor       # executavel standalone Linux ELF (~15 MB)
+```
+
+Ambos os scripts instalam o PyInstaller automaticamente se necessario.
 
 ### Como implantar no servidor
 
@@ -259,15 +326,27 @@ Copie apenas dois arquivos para o servidor Protheus:
 | `broker-monitor.exe` | Executavel standalone. Nao requer Python nem internet. |
 | `config.json` | Suas configuracoes (criado a partir do `config.example.json`) |
 
-```
+**Windows:**
+
+```text
 C:\Scripts\broker-monitor\
   broker-monitor.exe
   config.json
 ```
 
+**Linux:**
+
+```text
+/opt/broker-monitor/
+  broker-monitor       # lembre-se: chmod +x broker-monitor
+  config.json
+```
+
 ### Como executar no servidor
 
-O uso e identico ao modo instalado via pip -- basta substituir `broker-monitor` pelo caminho do `.exe`:
+O uso e identico ao modo instalado via pip -- basta substituir `broker-monitor` pelo caminho do binario.
+
+**Windows:**
 
 ```powershell
 # Verificar status
@@ -280,8 +359,24 @@ C:\Scripts\broker-monitor\broker-monitor.exe run --config C:\Scripts\broker-moni
 C:\Scripts\broker-monitor\broker-monitor.exe run --config C:\Scripts\broker-monitor\config.json --daemon --interval 5
 ```
 
+**Linux:**
+
+```bash
+# Verificar status
+/opt/broker-monitor/broker-monitor check --config /opt/broker-monitor/config.json
+
+# Execucao pontual (ideal para cron / systemd timer)
+sudo /opt/broker-monitor/broker-monitor run --config /opt/broker-monitor/config.json
+
+# Modo daemon
+sudo /opt/broker-monitor/broker-monitor run --config /opt/broker-monitor/config.json --daemon --interval 5
+```
+
+> O `sudo` no Linux e necessario porque o restart usa `systemctl restart`. Como alternativa,
+> configure uma regra `sudoers` NOPASSWD especifica (ver secao [Requisitos > Linux](#linux)).
+>
 > O servidor destino **nao precisa** de Python, pip ou qualquer outra dependencia instalada.
-> O `.exe` carrega tudo internamente.
+> O binario carrega tudo internamente.
 
 ---
 
@@ -307,6 +402,67 @@ O modo one-shot e o ideal para uso com o Task Scheduler. Configure assim:
    - Marque **Se a tarefa ja estiver em execucao, a seguinte regra se aplica**: `Nao iniciar uma nova instancia`
 
 > **Dica:** Para encontrar o caminho do executavel apos instalar com `uv`, execute `where broker-monitor` no terminal.
+
+---
+
+## Agendamento no Linux (cron ou systemd timer)
+
+No Linux, o modo one-shot e o ideal para agendamento. Escolha uma das duas abordagens.
+
+### Opcao A -- cron
+
+Edite o crontab do root (o restart precisa de privilegio):
+
+```bash
+sudo crontab -e
+```
+
+Adicione a linha (executa a cada 5 minutos):
+
+```cron
+*/5 * * * * /opt/broker-monitor/broker-monitor run --config /opt/broker-monitor/config.json >> /var/log/broker-monitor-cron.log 2>&1
+```
+
+### Opcao B -- systemd timer (recomendado)
+
+Crie a unit de servico `/etc/systemd/system/broker-monitor.service`:
+
+```ini
+[Unit]
+Description=Protheus Broker Monitor (one-shot)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/broker-monitor/broker-monitor run --config /opt/broker-monitor/config.json
+```
+
+Crie o timer `/etc/systemd/system/broker-monitor.timer`:
+
+```ini
+[Unit]
+Description=Executa o Protheus Broker Monitor a cada 5 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=broker-monitor.service
+
+[Install]
+WantedBy=timers.target
+```
+
+Ative:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now broker-monitor.timer
+sudo systemctl list-timers broker-monitor.timer   # conferir o agendamento
+```
+
+> O `broker-monitor.service` roda como **root** por padrao, entao tem permissao para o
+> `systemctl restart` dos AppServers. Se preferir um usuario dedicado, ajuste `User=` na unit
+> e conceda a regra `sudoers` NOPASSWD descrita em [Requisitos > Linux](#linux).
 
 ---
 
