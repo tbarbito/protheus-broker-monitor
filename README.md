@@ -48,8 +48,13 @@ codigo-fonte, um config por ambiente.
 - Cada AppServer Protheus deve estar registrado como uma **unit systemd**, ex:
   `/etc/systemd/system/appserver_slave01.service`. O campo `serviceName` do `config.json`
   deve conter o nome dessa unit (ex: `appserver_slave01` ou `appserver_slave01.service`).
-- O processo precisa de permissao para reiniciar a unit: rodar como **root**, ou conceder
-  permissao pontual via `sudoers` (ex: `monitor ALL=(root) NOPASSWD: /usr/bin/systemctl restart appserver_slave01.service`)
+- O processo precisa de permissao para reiniciar a unit. O monitor detecta isso
+  automaticamente: se **nao** estiver rodando como root, ele prefixa `sudo -n` no
+  `systemctl restart` (o `is-active`, por ser somente leitura, nunca usa sudo). Entao:
+  - rode o monitor como **root** (ex: unit systemd com `User=root`, ou cron do root); **ou**
+  - rode como usuario comum e conceda uma regra `sudoers` **NOPASSWD escopada**, ex:
+    `monitor ALL=(root) NOPASSWD: /usr/bin/systemctl restart appserver_slave01.service`
+    (uma linha por unit, ou via `Cmnd_Alias`). Nunca conceda `systemctl` livre.
 - O modo **cluster** nao se aplica ao Linux (deixe `cluster.enabled: false`)
 
 > **Exemplo minimo de unit systemd do AppServer** (`/etc/systemd/system/appserver_slave01.service`):

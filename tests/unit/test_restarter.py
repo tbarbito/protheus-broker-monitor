@@ -210,3 +210,30 @@ class TestSystemdRestart:
             ok, state = _restart_service_systemd("appserver_slave01", start_timeout=3)
         assert ok is False
         assert "Timeout" in state
+
+    def test_uses_sudo_when_not_root(self):
+        with patch("broker_monitor.restarter._needs_sudo", return_value=True), \
+             patch("broker_monitor.restarter.subprocess.run",
+                   side_effect=[_make_proc(0), _make_proc(0, "active")]) as run, \
+             patch("broker_monitor.restarter.time.sleep"):
+            ok, _ = _restart_service_systemd("appserver.service", start_timeout=5)
+        assert ok is True
+        restart_cmd = run.call_args_list[0].args[0]
+        assert restart_cmd == ["sudo", "-n", "systemctl", "restart", "appserver.service"]
+
+    def test_no_sudo_when_root(self):
+        with patch("broker_monitor.restarter._needs_sudo", return_value=False), \
+             patch("broker_monitor.restarter.subprocess.run",
+                   side_effect=[_make_proc(0), _make_proc(0, "active")]) as run, \
+             patch("broker_monitor.restarter.time.sleep"):
+            ok, _ = _restart_service_systemd("appserver.service", start_timeout=5)
+        assert ok is True
+        restart_cmd = run.call_args_list[0].args[0]
+        assert restart_cmd == ["systemctl", "restart", "appserver.service"]
+
+    def test_is_active_never_uses_sudo(self):
+        # estado e read-only: nunca deve usar sudo, mesmo sem ser root
+        with patch("broker_monitor.restarter._needs_sudo", return_value=True), \
+             patch("broker_monitor.restarter.subprocess.run", return_value=_make_proc(0, "active")) as run:
+            _get_service_state_systemd("appserver.service")
+        assert run.call_args_list[0].args[0] == ["systemctl", "is-active", "appserver.service"]
